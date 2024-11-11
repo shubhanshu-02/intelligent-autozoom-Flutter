@@ -1,6 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:flutter/widgets.dart';
+import 'package:realtime_obj_detection/full_screen_image.dart';
 import 'package:tflite_v2/tflite_v2.dart';
 
 void main() async {
@@ -37,6 +39,7 @@ class RealTimeObjectDetection extends StatefulWidget {
 
 class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
   late CameraController _controller;
+  final List<File> _captureImages = [];
   bool isModelLoaded = false;
   List<dynamic>? recognitions;
   int imageHeight = 0;
@@ -46,12 +49,14 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
   void initState() {
     super.initState();
     loadModel();
-    initializeCamera(null);
+    initializeCamera();
   }
 
   @override
   void dispose() {
+    _controller.stopImageStream();
     _controller.dispose();
+    Tflite.close();
     super.dispose();
   }
 
@@ -65,37 +70,13 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
     });
   }
 
-  // void toggleCamera() {
-  //   final lensDirection = _controller.description.lensDirection;
-  //   CameraDescription newDescription;
-  //   if (lensDirection == CameraLensDirection.front) {
-  //     newDescription = widget.cameras.firstWhere((description) =>
-  //         description.lensDirection == CameraLensDirection.back);
-  //   } else {
-  //     newDescription = widget.cameras.firstWhere((description) =>
-  //         description.lensDirection == CameraLensDirection.front);
-  //   }
-
-  //   initializeCamera(newDescription);
-  //   }
-
-  void initializeCamera(description) async {
-    if (description == null) {
-      _controller = CameraController(
-        widget.cameras[0],
-        ResolutionPreset.high,
-        enableAudio: false,
-      );
-    } else {
-      _controller = CameraController(
-        description,
-        ResolutionPreset.high,
-        enableAudio: false,
-      );
-    }
-
+  void initializeCamera() async {
+    _controller = CameraController(
+      widget.cameras[0],
+      ResolutionPreset.veryHigh,
+      enableAudio: false,
+    );
     await _controller.initialize();
-
     if (!mounted) {
       return;
     }
@@ -110,68 +91,151 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
   void runModel(CameraImage image) async {
     if (image.planes.isEmpty) return;
 
+    imageHeight = image.height;
+    imageWidth = image.width;
     var recognitions = await Tflite.detectObjectOnFrame(
       bytesList: image.planes.map((plane) => plane.bytes).toList(),
       model: 'SSDMobileNet',
-      imageHeight: image.height,
-      imageWidth: image.width,
+      imageHeight: imageHeight,
+      imageWidth: imageWidth,
       imageMean: 127.5,
       imageStd: 127.5,
       numResultsPerClass: 1,
-      threshold: 0.6,
+      threshold: 0.5,
     );
 
     setState(() {
       this.recognitions = recognitions;
-      // imageHeight = image.height;
-      // imageWidth = image.width;
     });
+  }
+
+  Future<void> _captureImage() async {
+    if (recognitions != null && recognitions!.isNotEmpty) {
+      await adjustZoomForObject(recognitions![0]);
+    }
+    try {
+      XFile picture = await _controller.takePicture();
+      setState(() {
+        _captureImages.add(File(picture.path));
+      });
+      await _controller.setZoomLevel(1.0);
+    } catch (e) {
+      print("Error capturing image : $e");
+    }
+  }
+
+Future<void> adjustZoomForObject(dynamic object) async {
+  double objectWidth = object['rect']['w'] * imageWidth;
+  double objectHeight = object['rect']['h'] * imageHeight;
+  double objectSize = objectWidth * objectHeight;
+
+  double frameSize = (imageWidth * imageHeight) as double;
+  double objectProportion = objectSize / frameSize;
+
+  print("Object Proportion: $objectProportion");
+
+  double targetZoom;
+
+  if (objectProportion > 0.5) {
+    targetZoom = 1.0;
+  } else if (objectProportion > 0.3) {
+    targetZoom = 1.5;
+  } else if (objectProportion > 0.2) {
+    targetZoom = 2.0;
+  } else if (objectProportion > 0.1) {
+    targetZoom = 2.5;
+  } else {
+    targetZoom = 3.0;
+  }
+
+  try {
+    await smoothZoomToLevel(targetZoom);
+  } catch (e) {
+    print("Error adjusting zoom: $e");
+  }
+}
+
+  Future<void> smoothZoomToLevel(double targetZoom) async {
+    double currentZoom = 1.0;
+    double increment = (targetZoom - currentZoom) / 10;
+
+    for (int i = 0; i < 10; i++) {
+      currentZoom += increment;
+      await _controller.setZoomLevel(currentZoom);
+      await Future.delayed(Duration(milliseconds: 50));
+    }
+  }
+
+  void _openImage(File imageFile) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => FullScreenImage(imageFile: imageFile),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_controller.value.isInitialized) {
-      return Container();
+      return const Center(child: CircularProgressIndicator());
     }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Real-time Object Detection'),
       ),
-      body: Column(
-        // mainAxisAlignment: MainAxisAlignment.center,
-
-        children: [
-          SizedBox(
-            width: MediaQuery.of(context).size.width,
-            height: MediaQuery.of(context).size.height * 0.8,
-            child: Stack(
+      body: Center(
+        child: Column(
+          children: [
+            SizedBox(
+              // fit: BoxFit.fitWidth,
+              width: MediaQuery.of(context).size.width,
+              height: MediaQuery.of(context).size.height * 0.7,
+              child: Stack(
+                children: [
+                  CameraPreview(_controller),
+                  if (recognitions != null)
+                    BoundingBoxes(
+                      recognitions: recognitions!,
+                      previewH: imageHeight.toDouble(),
+                      previewW: imageWidth.toDouble(),
+                      screenH: MediaQuery.of(context).size.height,
+                      screenW: MediaQuery.of(context).size.width * 0.7,
+                    ),
+                ],
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                CameraPreview(_controller),
-                if (recognitions != null)
-                  BoundingBoxes(
-                    recognitions: recognitions!,
-                    previewH: imageHeight.toDouble(),
-                    previewW: imageWidth.toDouble(),
-                    screenH: MediaQuery.of(context).size.height * 0.8,
-                    screenW: MediaQuery.of(context).size.width,
-                  ),
+                IconButton(
+                    onPressed: _captureImage,
+                    icon: const Icon(
+                      Icons.camera,
+                    ))
               ],
             ),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                  onPressed: () {
-                    // toggleCamera();
-                  },
-                  icon: const Icon(
-                    Icons.camera_front,
-                    size: 30,
-                  ))
-            ],
-          )
-        ],
+            SizedBox(
+              height: 80,
+              child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _captureImages.length,
+                  itemBuilder: (context, index) {
+                    return GestureDetector(
+                      onTap: () => _openImage(_captureImages[index]),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 1),
+                        child: Image.file(
+                          _captureImages[index],
+                          width: 70,
+                        ),
+                      ),
+                    );
+                  }),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -184,7 +248,8 @@ class BoundingBoxes extends StatelessWidget {
   final double screenH;
   final double screenW;
 
-  const BoundingBoxes({super.key, 
+  const BoundingBoxes({
+    super.key,
     required this.recognitions,
     required this.previewH,
     required this.previewW,
@@ -197,9 +262,9 @@ class BoundingBoxes extends StatelessWidget {
     return Stack(
       children: recognitions.map((rec) {
         var x = rec["rect"]["x"] * screenW;
-        var y = rec["rect"]["y"] * screenH;
+        var y = rec["rect"]["y"] * screenH * 0.7;
         double w = rec["rect"]["w"] * screenW;
-        double h = rec["rect"]["h"] * screenH;
+        double h = rec["rect"]["h"] * screenH * 0.7;
 
         return Positioned(
           left: x,
@@ -214,7 +279,7 @@ class BoundingBoxes extends StatelessWidget {
               ),
             ),
             child: Text(
-              "${rec["detectedClass"]} ${(rec["confidenceInClass"] * 100).toStringAsFixed(0)}% Width:${(w).ceil()} Heght: ${h.ceil()}",
+              "${rec["detectedClass"]} ${(rec["confidenceInClass"] * 100).toStringAsFixed(0)}% Width:${(w).ceil()} Height: ${h.ceil()}",
               style: TextStyle(
                 color: Colors.red,
                 fontSize: 15,
