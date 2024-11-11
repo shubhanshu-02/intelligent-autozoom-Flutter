@@ -109,13 +109,6 @@ Future<void> _captureImage() async {
     int height = (object['rect']['h'] * originalImage.height).toInt();
 
 
-    x = x.clamp(0, originalImage.width - 1);
-    y = y.clamp(0, originalImage.height - 1);
-    width = (x + width > originalImage.width) ? originalImage.width - x : width;
-    height = (y + height > originalImage.height)
-        ? originalImage.height - y
-        : height;
-
     try {
       img.Image croppedImage = img.copyCrop(originalImage,
           x: x, y: y, width: width, height: height);
@@ -158,25 +151,32 @@ Future<void> _captureImage() async {
       appBar: AppBar(
         title: const Text('Real-time Object Detection'),
       ),
-      body: Center(
-        child: Column(
+      body: Column(
           children: [
-            SizedBox(
-              // fit: BoxFit.fitWidth,
-              width: MediaQuery.of(context).size.width,
-              height: MediaQuery.of(context).size.height * 0.7,
-              child: Stack(
-                children: [
-                  CameraPreview(_controller),
-                  if (recognitions != null)
-                    BoundingBoxes(
-                      recognitions: recognitions!,
-                      previewH: imageHeight.toDouble(),
-                      previewW: imageWidth.toDouble(),
-                      screenH: MediaQuery.of(context).size.height,
-                      screenW: MediaQuery.of(context).size.width * 0.7,
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: SizedBox(
+                    // fit: BoxFit.fitWidth,
+                    width: MediaQuery.of(context).size.width*.9,
+                    height: MediaQuery.of(context).size.height*.7,
+                    child: Stack(
+                      children: [
+                        CameraPreview(_controller),
+                        if (recognitions != null)
+                          BoundingBoxes(
+                            recognitions: recognitions!,
+                            previewH: MediaQuery.of(context).size.height,
+                            previewW: MediaQuery.of(context).size.width,
+                            screenH: MediaQuery.of(context).size.height*.7,
+                            screenW: MediaQuery.of(context).size.width*.9,
+                          ),
+                      ],
                     ),
-                ],
+                  ),
+                ),
               ),
             ),
             Row(
@@ -186,22 +186,29 @@ Future<void> _captureImage() async {
                     onPressed: _captureImage,
                     icon: const Icon(
                       Icons.camera,
+                      size: 30,
+                      color: Colors.blueAccent,
                     ))
               ],
             ),
             SizedBox(
-              height: 80,
+              height: 75,
               child: ListView.builder(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0),
                   scrollDirection: Axis.horizontal,
                   itemCount: _captureImages.length,
                   itemBuilder: (context, index) {
                     return GestureDetector(
                       onTap: () => _openImage(_captureImages[index]),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 1),
-                        child: Image.file(
-                          _captureImages[index],
-                          width: 70,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.file(
+                            _captureImages[index],
+                            width: 70,
+                            fit: BoxFit.cover,
+                          ),
                         ),
                       ),
                     );
@@ -209,7 +216,6 @@ Future<void> _captureImage() async {
             ),
           ],
         ),
-      ),
     );
   }
 }

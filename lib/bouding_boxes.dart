@@ -22,9 +22,9 @@ class BoundingBoxes extends StatelessWidget {
     return Stack(
       children: recognitions.map((rec) {
         var x = rec["rect"]["x"] * screenW;
-        var y = rec["rect"]["y"] * screenH * 0.7;
+        var y = rec["rect"]["y"] * screenH;
         double w = rec["rect"]["w"] * screenW;
-        double h = rec["rect"]["h"] * screenH * 0.7;
+        double h = rec["rect"]["h"] * screenH;
 
         return Positioned(
           left: x,
