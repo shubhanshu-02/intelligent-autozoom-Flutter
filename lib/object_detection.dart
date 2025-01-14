@@ -149,7 +149,7 @@ Future<void> _captureImage() async {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Real-time Object Detection'),
+        title: const Text('Intelligent AutoZoom Camera'),
       ),
       body: Column(
           children: [
