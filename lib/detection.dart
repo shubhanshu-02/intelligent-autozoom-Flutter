@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -184,7 +182,28 @@ class _DetectionState extends State<Detection> {
         print("Error capturing and processing image: $e");
       }
     }
-  }
+  }else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            "No object detected yet!",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.normal,
+              color: Colors.white,
+            ),
+          ),
+          backgroundColor: const Color.fromARGB(255, 0, 32, 87),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          margin: const EdgeInsets.all(16),
+          elevation: 6,
+        ),
+      );
+    }
   }
 
   void _openImage(File imageFile) {
