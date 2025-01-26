@@ -4,4 +4,4 @@ This Flutter app demonstrates real-time object detection using the camera and Te
 
 
 
-  ![](flutter.gif)
+  ![](demo.mp4)
